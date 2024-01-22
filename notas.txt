@@ -1,0 +1,144 @@
+--------------------SERVIR UN CONTENIDO ESTATICO ----------------
+
+
+servir contenidoe statico se refiere que al prender tu backend, y meterte
+al puerto donde se esta corriendo 8ejemplo localhost:3000
+desde un navegador web, este nos devuelva un HTML! (osea un cotnenido estatico)
+
+
+1.- npm install @nestjs/serve-static
+
+--------------------- rutas gobales ---------------
+
+
+puedes agregar mediante main.ts un prefijo global para
+que todas als rutas del controlador se les anteponga algo
+
+
+
+------------- MANEJANDO BASES DE DATOS ---------------------
+
+
+Para conectarnos a una DB.. necesitamos una
+
+
+formas de configurar DB
+1.- instalar MONGO en nuestra computadora 
+
+    desventajas: - muchas configuraciones a hacer
+                 - no muy bueno (cada usuario deberia instalar 
+                                y configurar la DB y es muy tardado)
+                 
+2.- MongoATLAS: servicio de mongo en la nube, 
+                para desplegar app en la nube (backend)
+
+            desventaja: alguien que haga un codigo destructivoi... todos los demas miembros perderan
+                        la informacion.
+
+
+3.- IMAGENES y contenedores de DOCKER:
+
+        generas un archivo llamado docker-compose.yml
+        el cual contendra las instrucciones que quieres que ejecute dockerpara
+         levantar tus imagene sys ervicios!
+
+
+         una imagen es como una computadora virtual, solo seria 
+         el servicio, se usa una version muy reducida de un
+          linux (depende de la imagen, dependera el sistema 
+          operativo)
+
+
+--------------------- SCHEMAS Y ENTITIES ----------------
+
+
+una entidad es una tabla, para que nest trate una clase como entidad debes ponerle decorados Schema y exportar una constante con la sig sintaxis 
+export const PokemonSchema = SchemaFactory.createForClass( "className" );
+
+
+import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
+import { Document } from "mongoose";
+
+@Schema()
+export class Pokemon extends Document {
+
+    //id: string // Mongo me lo da
+    @Prop({
+        unique: true,
+        index: true
+    })
+    name: string;
+
+    @Prop({
+        unique: true,
+        index: true
+    })
+    no: number;
+
+}
+
+
+export const PokemonSchema = SchemaFactory.createForClass( Pokemon );
+
+
+
+2.- debes extender de Document y 3 debes importarlo 
+de el modulo OHO si importas en el appModule, seria una importacion 
+de MongooseModule.forroot
+
+si es en un modulo "hijo" usarias forFeature, las opciones async es por si esa 
+configuracion se tare de otro lugar
+
+
+
+
+@Module({
+  controllers: [PokemonController],
+  providers: [PokemonService],
+  imports:[
+    MongooseModule.forFeature( [
+      {
+        name: Pokemon.name,
+        schema: PokemonSchema,
+      }
+    ])
+  ]
+})
+export class PokemonModule {}
+
+
+Pokemon.name: el .name (propiedad) viene heredada 
+de Document e indica el nombre de la clase,
+
+PokemonSchema es la constant que exportamos
+
+
+3.- injectando el modelo en alguns ervicio ´para hacero
+inserciones:
+
+constructor(
+    @InjectModel( Pokemon.name )
+    private readonly pokemonModel: Model<Pokemon> //importando el model (entity)
+  ){}
+
+@InjectModel: se debe poner este decorador, ya que, el modelo no es un provider ( claseque se puede injectar en otra)
+              , entocnes este decorador eprmite que esto sea
+               injectado
+
+
+4.- Haz la insercion en la DB
+
+  async create(createPokemonDto: CreatePokemonDto) {
+    createPokemonDto.name = createPokemonDto.name.toLocaleLowerCase();
+
+    const pokemon = await this.pokemonModel.create( createPokemonDto );
+
+    return pokemon;
+  }
+
+el pokemonModel ( que in injectaste ene l constructor y pusiste eld ecorador @InjectModel)
+al extender de document, cuenta ya con mtodos para hacer interacciones con bases de datos!
+asi que puedes llamar metodos como find, create, update, etc etc
+
+NOTA: toda peticion a una DB es asyncrona, asi que debes 
+usar la sintaxis de async await 
