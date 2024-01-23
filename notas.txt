@@ -142,3 +142,432 @@ asi que puedes llamar metodos como find, create, update, etc etc
 
 NOTA: toda peticion a una DB es asyncrona, asi que debes 
 usar la sintaxis de async await 
+
+
+---------- FORMAS OPTIMAS DE INSERTAR COSAS EN UNA DB -----------
+
+
+//Forma optima 1 de hacer inserciones a una DB en NestJs (cualquier lenguaje esto puede servir muy bien)
+    // const insertPromisesArray = [];
+
+    // data.results.forEach( async({ name, url }) => {
+
+    //   const segments = url.split("/");
+    //   const no = +segments[segments.length - 2]
+
+    //   //si pides 500 pokemons, el await se parara 500 veces a esperar! esto no es optimo y conlleva
+    //   // a tiempos mas grandes
+    //   // const pokemon = await this.pokemonModel.create({ name, no})
+    //   insertPromisesArray.push(
+    //     this.pokemonModel.create({name, no}) //le pusheas promesas,e sto regresa promesas
+    //   )
+    // })
+    // console.log(insertPromisesArray)
+    // //le mandas un arrayd e todas las promesas!
+    // //este metodo toma un array de promesas y devuelve la resolucion de todas ellas
+    // //si una faya, todas fayan
+    // await Promise.all( insertPromisesArray) //devuelve un array con cada promesa resuelta
+
+    // return data.results;
+
+
+
+-----------------------forma 2 FORMA 100% OPTIMA-------------------
+
+al hacer inserciones masivas, es recomendable hacer esto
+
+
+
+      async executeSeed(){
+
+    await this.pokemonModel.deleteMany({}); // delete * from pokemons
+
+    const { data } = await this.axios.get<PokeResponse>('https://pokeapi.co/api/v2/pokemon?limit=20');
+
+
+    const PokemonToInsert: { name: string, no: number}[] = [];
+
+    data.results.forEach( async({ name, url }) => {
+
+      const segments = url.split("/");
+      const no = +segments[segments.length - 2]
+      
+      PokemonToInsert.push({name, no}) //[{name: bulkbasor, no: 65}]
+    })
+
+    await this.pokemonModel.insertMany(PokemonToInsert) 
+  }
+
+
+------------------------- custom provider ----------------------
+
+
+para evitar problemas a futuros con axios (imagina que cambia sus metodos), o que necesites migrar
+la forma d ehacer peticiones, debes hacerlod e la amnera menos dolora!
+
+debes cerar un adaptador para envez de suar axios directamente
+ en la app
+se centraicle en otro lugar! asi solo cambiarias un archivo
+
+
+lo ideal es crear una clase que contenga las logicas, osea, 
+crear tu propia implementacion
+de una clase!
+
+
+Provider = clase que se pueda injectar, debene star definidos en el modulo
+
+
+
+
+
+
+@Injectable()
+export class AxiosAdapter implements HttpAdapter{
+    private  axios: AxiosInstance = axios;
+    
+    async get<T>(url: string): Promise<T> {
+        try{
+            const { data } = await this.axios.get<T>( url );
+            return data;
+
+        }catch( error ){
+            throw new Error('This is an error - Check Logs');
+        }
+    }
+  
+
+}
+
+
+este adaptador se hizo para centralizar la funcion de axios, si algun dia quieres cambiar la implementacion ya sea por
+migracios o actualizacion de un metodo, solo cambiaras la logica d eun lugar
+
+
+@Injectable() CONVIERTE LA CLASE EN un provider (una clase que s epuede injectar en oitros lugares)
+, similar a como funciona un service, pero,  en nestJS los provider estan
+a nivel de modulo,
+
+
+
+--------------------- PAGINACIONES DE LA DATA DESDE BACKEND ---------------
+
+
+las apginasciones son faciles de lograr en nestJs:
+
+
+ @Get()
+  findAll( @Query() queryParameters ) {
+    console.log(queryParameters)
+    return this.pokemonService.findAll()
+      .limit(5)
+      .skip( 5 ) 
+  }
+
+
+el metodo findall ya tiene metodoas internso que te ayudan con esto
+
+
+.limit( n ): liminta la respuesta a n cantidad de resultados
+
+.skip( n ); se salta los primeros n resultados
+
+ene ste caso le estas diciendo, encuentra todo, limitalo a 5 resultados,
+pero saltandote los priemros 5
+
+
+@Query() decorador que atrapa los query parameters de la url!!
+
+osea, todo lo que venga en la url 
+con sintaxis "?" y "&&" sera capturado en un object,
+ya apartir de aqui los podemos validar
+
+
+
+import { IsOptional, IsPositive, Min } from "class-validator";
+
+export class PaginationDto {
+
+    @IsOptional()
+    @IsPositive()
+    @Min(1)
+    limit: number;
+
+    @IsOptional()
+    @IsPositive()
+    offset: number
+}
+
+
+  @Get()
+  findAll( @Query() paginationDto: PaginationDto ) {
+    console.log(paginationDto)
+    return this.pokemonService.findAll()
+      .limit(5)
+      .skip( 5 ) 
+  }
+
+
+
+con este dto daras validaciones (gracias a class validator) sobre como debe llegar la data desde el frontend
+y mandaras errores eprsonalziados
+
+
+puedes configurar el app global para comversiones implkicitas
+de numbers (recuerda que por default lo que se mandend del frontend 
+te llegara como string)
+
+
+ app.useGlobalPipes( 
+    new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
+    transformOptions: {
+      enableImplicitConversion: true
+    }
+    })
+
+
+
+NOTAS: basicamente para  realizar paginaciones se usa un OFFSET!
+en cada cambio de pagina se hace una peticion al backend cambiandoe ste offset y dandonos los siguientes 
+resultados! maravilloso xd
+
+
+
+
+
+
+----------------- SECCCION 9 -----------------------------
+
+se continua el propyecto! ene sta seccion se buscara subir nuestra aplicacion a 
+heroku! para que porfin funcione en la red :)
+
+
+docker: la ventaja de usar docker es que podemos montar una base de datos
+      desde 09 en cuestion de segundos!, la imagen de la DB esta configurada por expertos
+      y en docker la montas!
+
+
+
+
+---------------------- VARIABLES DE ENTORNO ------------------
+
+
+
+necsitamos estas avriables ya que, dependiendo donde se ejecute la app,
+se ejecutaran ciertas variables!
+
+la idea no es que cada vez que hagas un cambio (digamos pasar de local a produccion)
+tener que cambiar manualmente TOOODOS los string de conexion local a la DB (eso seria 
+una pesadilla XD). para esto debemos crear variables de entorno =3
+
+
+
+
+
+las variables de entorno normalmente, se ponen dentro de un archivo .env que
+se encontrara en el inicio de la app (al nivel de los node_,odules y el 
+package.json)
+
+
+** ESTE ARCHIVO NO SE SUBE A GIT *** en este archivo hay keys y passwords,
+pueden suar tus llaves para hacer cosas... por eso no se suben, 
+pero, son necesarias
+
+
+
+ejemplo de archivo .env:
+
+MONGODB=mongodb://localhost:27017/nest-pokemon
+PORT=3001
+
+
+
+ahora.. tu puedes acceder a las variables de entornod e manera MUUY sencilla!
+
+como?, simple.. nodeJS ya tiene configuradas las variables de entorno!
+y peudes acceder a ellas emdiante process.env, pero ... para poder 
+ver tus variables de entorno necesitaras una instalacion extra!
+
+
+debes decirle a nest "oye hermano,
+ cargame las variables que se encuentran en el .env
+, porfa we, paro"
+
+
+para haremos un npm install @nestjs/config ,
+
+este paquete nos permitira hacer nuestro favor realidad =)
+
+
+
+una vez instalado el packete, debes ir al app.module
+e importar el ConfigureModule.forRoot()
+ (nota, debe ser el primer import osea posicion [0] del array)
+
+
+
+----------------------- CONFIGURATION LOADER --------------------
+
+cuando queremos usar variables de entorno dentro de un building block
+(osea un provider, servicio, controlador, etc), se recomienda usar 
+el ConfigurationModule()
+
+
+
+
+pero ahora, ay un provblema al usar directamente las variables de entorno en 
+logicas de la aplicacion (como sservicios),
+
+recuerda que ela rchivo .env no se comparte, de hecho nosotros daremos un template para que
+otro desarrollador lo configure!, peor si el 
+desarrollador no configura una de estas variables bien
+entocnes la app no funcionara o dara comportamientos.. raros
+
+
+
+
+ALTERNATIVA 1: 95% de casos funciona!
+
+
+crea un archivo en el src:
+
+  config/app.config.ts (tambien puede ser llamado env.config.ts)
+
+
+    DESTE ARCHIVO SE EVRA asi
+    
+
+export const EnvConfiguration = ()=> ({
+    //esta avriable nos dice si eestamos en produccion, testing, o desarrollo
+    environment: process.env.NODE_ENV || "dev", //si no esta, se coloca como dev esta variable de entorno
+    mongodb: process.env.MONGODB,
+    port: process.env.PORT || 3002,
+    defaultLimit: process.env.DEFAULT_LIMIT || 7
+})
+
+/*
+    Lo de arriba es lo mismo que
+
+    const envFb = () => {
+        return {
+
+        }
+    }
+
+*/
+
+EL OBJETIVO SERA MAPEAR EN UNA FUNCION LAS VARIABLES DE ENTORNO
+
+
+DE AHI IREMOS A EL APP.MODULE DONDE CONFIGUARAMOS EL ConfigureModule
+
+y lo mandaremos como argumento
+@Module({
+  imports: [
+    ConfigModule.forRoot( {
+      load: [ EnvConfiguration ]
+    }),
+
+    OJO: ene ste punto no se aplicaran esas valdiaciones!, 
+    ConfigureModule ofrece un servicio
+    para que nosotros podamos en servicios 
+    (cualquier cosa que nos permite suar injeccion de dependencias)
+
+
+
+  Servicio ConfigModule (injecta: private readonly condigService= ConfigService)
+
+  y en el modulo respectivo importa solo ConfigModule al inicio
+
+
+
+ulñtimo paso:
+
+  constructor(
+    @InjectModel( Pokemon.name )
+    private readonly pokemonModel: Model<Pokemon>, //importando el model (entity)
+  
+    private readonly configService: ConfigService
+    ){
+
+    console.log(process.env.DEFAULT_LIMIT)
+    console.log(configService.get("defaultLimit"))
+  }
+
+
+podremsoa cceder al valor por default mediante el configService y su funcion get,
+de otra manera ( process.env) dara undefined (inexistente)
+
+
+RESUMEN: en pocas palabras krnal, creamos una constante el cual contiene una funcion anonima
+que MAPEA ela rchivo .env si alguna propiedad falta dentro de este archivo, se aplica un valor por default,
+entocnes, esta funcion (constante), se la mandamos como argumento
+ en la propiedad load
+dentro del app.module.ts ConfigureModule.forRoot, esto CARGA estas variables(laas de el mapeo)
+DENTRO DEL CONFIG MODULE y al tu llamar el 
+configServcie .get('defaultLimit') MANDARAS A LLAMAR LA PROPIEDAD DEL MAPEO
+y esta a su vez mandara a llamar el .env, si encuentra algo, te da el valor, si note dal el valor por default
+:)
+
+
+ALTERNATIVA 2: 100% de los casos 
+              ( dar errores si una variable 
+              esta mal configurada)
+
+lo anterior funcionaria bien en la GRAN mayoria de las apps, pero, en el caso
+de que nostros no tengamos definido el MONGODB por ejemplo, }
+deberiamos atrapar el error de
+mejor manera!
+
+
+el problema se extiende tambien a que, si nosotros usamos una variable de entorno
+en un archivo fuera del alcanze del modulo general (el app.module) 
+como por ejemplo en main.ts, nosotros no tendremos acceso a la configuracion hecha y deberemo usar el proces.env.
+para asignar algo, PERO nosotros si hacmos esto no tendremos las configuracionesde la funcion que hizimos
+
+
+para solucuionar esto crearemos un ValidationSchema
+
+los ValidationSchema nos ayudara cuando queramos ser mas estrictos
+referente a si una propiedad no viene, si el tipo de dato es erroneo, etc
+
+
+
+1.- usaremos el el paquete de joi: este es un paquete que nos ayuda
+a validar, lanzar errores, poner valores por defecto, en nuestro caso...
+NOS AYUDARA a revisar que on objeto luzca de la manera esperada 
+(las variables de entorno
+en este caso)
+
+
+
+------------------ APROVISIONANDO MONGODB para desplegar app ----------------
+
+
+
+para desplegar nuestra db en la web y darle acceso desde la red, podemos
+usar MongoDB Atlas, pero, en este caso usaremos realway
+
+
+realway sustoituria hiroku (SUBIREMOS EL BACKEND y LA DB ahi)
+
+
+basicamente en railway debes crera en el dashborad una databasemongo,
+ esto configurara una db mongo en la nube
+
+, se etd ara una cadena de conexion, si usas su cadena de conexion
+te conectaras a su DB de la nube ( con las limitantes
+dependiendo tu plan)
+
+ejemplo:
+
+mongodb://mongo:D2ha2aDHGcGEDaa33hD3gH-Fc25HE1ed@monorail.proxy.rlwy.net:11207
+
+
+
+
+
+

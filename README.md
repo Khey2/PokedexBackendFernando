@@ -29,6 +29,26 @@
 
 ```
 
+5.-  Clonar el archivo ___.env.template___ y renombrar la copia a ___.env___
+
+
+6.- Llenar las avriables de entorno definidas en el ```.env```
+
+7.- ejecutar la aplicacion en dev:
+
+```
+  npm run start:dev
+```
+
+7.- Reconstruir los registros de la DB
+
+```
+  http://localhost:3000/api/v2/seed
+
+```
+
+
+
 ## Stack usado
 * MongoDB
 * Nest
